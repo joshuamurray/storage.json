@@ -109,8 +109,8 @@ var Storage = function( relativePath ){
      * @returns {*}
      */
     this.make = function( callback ){
-        fs.open( $this.path(), 'w', function( error, fd ){
-            if( error ) return error( "File create error", error.stack );
+        fs.open( $this.path(), 'w', function( err, fd ){
+            if( err ) return error( "File create error", err.stack );
 
             $this.push( {}, callback );
         });
@@ -124,8 +124,8 @@ var Storage = function( relativePath ){
     this.pull = function( callback ){
         var readOptions = { encoding: "utf8" };
 
-        fs.readFile( $this.path(), readOptions, function( error, contents ){
-            if( error ) return error( "File read error", error.stack );
+        fs.readFile( $this.path(), readOptions, function( err, contents ){
+            if( err ) return error( "File read error", err.stack );
 
             callback( JSON.parse( contents ));
         });
@@ -140,8 +140,8 @@ var Storage = function( relativePath ){
         var writeOptions = { encoding: "utf8" };
         var prettyContents = JSON.stringForFile( data );
 
-        fs.writeFile( $this.path(), prettyContents, writeOptions, function( error ){
-            if( error ) return error( "File write error", error.stack );
+        fs.writeFile( $this.path(), prettyContents, writeOptions, function( err ){
+            if( err ) return error( "File write error", err.stack );
 
             $this.pull( callback );
         });
