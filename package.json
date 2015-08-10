@@ -1,0 +1,23 @@
+{
+  "name": "storage.json",
+  "version": "1.0.0",
+  "description": "A simple node module, for easily creating and managing JSON files for use within requiring modules.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joshuamurray/storage.json.git"
+  },
+  "keywords": [
+    "JSON",
+    "Storage"
+  ],
+  "author": "Josh Murray",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/joshuamurray/storage.json/issues"
+  },
+  "homepage": "https://github.com/joshuamurray/storage.json"
+}
