@@ -28,7 +28,7 @@ JSON.stringForFile = function( string, spaces ){
  * @param relativePath *REQUIRED
  * @constructor
  */
-var Storage = function( relativePath ){
+var Storage = function(){
     var $this = this;
     events.EventEmitter.call( this );
 
@@ -36,6 +36,16 @@ var Storage = function( relativePath ){
      * Relative path provided upon instantiation
      */
     this.storagePath;
+
+    /**
+     * Sets the file path of the instance.
+     * @param relativePath
+     */
+    this.file = function( relativePath ){
+        if( relativePath.substr( path.length - 4 ) != ".json" ) relativePath += ".json";
+
+        $this.storagePath = path.resolve( relativePath );
+    };
 
     /**
      * Saves the data into the JSON file
@@ -114,7 +124,7 @@ var Storage = function( relativePath ){
 
             $this.push( {}, callback );
         });
-    }
+    };
 
     /**
      * Reads and parses the contents of the file at this.storagePath.
@@ -145,36 +155,18 @@ var Storage = function( relativePath ){
 
             $this.pull( callback );
         });
-    }
-
-    /**
-     * Sets the instance's path variable to the supplied "relativePath" value
-     * @param path
-     */
-    this.lock = function( relativePath ){
-        if( ! relativePath ) return error( "You must provide a path to create a \"storage.json\" module." );
-
-        if( relativePath.substr( path.length - 4 ) != ".json" ) relativePath += ".json";
-
-        $this.storagePath = path.resolve( relativePath );
     };
 
     /**
      * The module's bootstrap function.
      * @param relativePath
      */
-    this.boot = function( relativePath ){
-        $this.lock( relativePath, function( contentObject ){
-            if( typeof contentObject != "object" ) return error( "File lock error" );
-
-            $this.file = contentObject;
-        });
-    };
+    this.boot = function(){};
 
     /**
      * Execute the module's bootstrap function on instantiation.
      */
-    $this.boot( relativePath );
+    $this.boot();
 }
 
 /**
@@ -185,6 +177,20 @@ var Storage = function( relativePath ){
 util.inherits( Storage, events.EventEmitter );
 
 /**
+ * Called PRIOR TO export to ensure that all variable values from "config.json"
+ * have been loaded. Sets all initial variables to their respective values.
+ * Instantiates any modules requiring instantiation, prior to exporting.
+ */
+var bootstrap = function(){
+    storage = new Storage();
+};
+
+/**
+ * Execute the bootstrap command before exporting
+ */
+bootstrap();
+
+/**
  * Exports an instantiation of the Storage module.
  */
-module.exports = Storage;
+module.exports = storage;
