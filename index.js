@@ -45,6 +45,8 @@ var Storage = function(){
         if( relativePath.substr( path.length - 4 ) != ".json" ) relativePath += ".json";
 
         $this.storagePath = path.resolve( relativePath );
+
+        return $this;
     };
 
     /**
