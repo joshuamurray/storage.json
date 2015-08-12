@@ -61,8 +61,14 @@ var Storage = function(){
      * @param callback
      */
     this.get = function( loadingPath, requiredPath, callback ){
-        var directories = requiredPath.split( "/" );
-        var loadName = directories[ directories.length -1 ];
+        var dir = requiredPath.split( "/" );
+
+        if( dir[ dir.length -1 ] == "lib" ){
+            dir.splice( dir.length -1, 1 );
+            requiredPath = dir.join( "/" );
+        }
+
+        var loadName = dir[ dir.length -1 ];
 
         $this.file( requiredPath ).load( function( required ){
             $this.file( loadingPath ).load( function( loading ){
@@ -165,6 +171,8 @@ var Storage = function(){
      * @returns {*}
      */
     this.make = function( callback ){
+        console.log( $this.path());
+
         fs.open( $this.path(), 'w', function( err, fd ){
             if( err ) return error( "File create error", err.stack );
 
