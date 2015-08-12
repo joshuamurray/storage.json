@@ -42,7 +42,7 @@ var Storage = function(){
      * @param relativePath
      */
     this.file = function( relativePath ){
-        if( relativePath.substr( path.length - 4 ) != ".json" ) relativePath += ".json";
+        if( relativePath.substr( relativePath.length - 5 ) != ".json" ) relativePath += ".json";
 
         $this.storagePath = path.resolve( relativePath );
 
@@ -74,7 +74,7 @@ var Storage = function(){
      */
     this.load = function( index, callback ){
         $this.open( function( data ){
-            if( ! index ) return callback( data );
+            if( typeof index == "function" ) return index( data );
 
             data = data[ index ] || false;
 
