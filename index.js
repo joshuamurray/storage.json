@@ -6,8 +6,7 @@ var fs = require( "fs" );
 var util = require( "util" );
 var path = require( "path" );
 var events = require( "events" );
-var error = require( "./lib/error" );
-var loader = require("./lib/loader" );
+var error = require( "./error" );
 
 /**
  * Simple wrapper to force adding of whitespace
