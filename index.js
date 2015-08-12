@@ -6,7 +6,8 @@ var fs = require( "fs" );
 var util = require( "util" );
 var path = require( "path" );
 var events = require( "events" );
-var error = require( "./error" );
+var error = require( "./lib/error" );
+var loader = require("./lib/loader" );
 
 /**
  * Simple wrapper to force adding of whitespace
@@ -48,6 +49,44 @@ var Storage = function(){
 
         return $this;
     };
+
+    /**
+     * Load file.
+     * If no file found create it.
+     * If found and empty, write values from "default".
+     * If found and not empty, but it doesnt contain ALL keys in "defaults" then add those keys and their values.
+     * If found and not empty, and includes all keys, BUT those keys MATCH the default values for the keys, tell the user to fix the values.
+     * Otherwise it will just load the file contents.
+     * @param index
+     * @param value
+     * @param callback
+     */
+    this.get = function( loadingPath, requiredPath, callback ){
+        var directories = requiredPath.split( "/" );
+        var loadName = directories[ directories.length -1 ];
+
+        $this.file( requiredPath ).load( function( required ){
+            $this.file( loadingPath ).load( function( loading ){
+                var altered = [];
+                var needToChangeValues = [];
+                var errorMsg = "There was a problem loading the config file for \""+ loadName +"\" module.";
+                var alterMsg = loadName +" config options are located in config.json. Populate values before continuing.";
+
+                for( var item in required ){
+                    if( ! loading[ item ]) altered.push( item );
+                    else if( loading[ item ] == required[ item ]) needToChangeValues.push( item );
+                    else required[ item ] = loading[ item ];
+                }
+
+                if( altered.length > 0 ) storage.save( required, function( saved ){
+                    if( saved.def_env ) return console.log( alterMsg );
+                    else return error( errorMsg );
+                });
+                else if( needToChangeValues.length > 0 ) return console.log( alterMsg, needToChangeValues );
+                else callback( loading );
+            });
+        });
+    }
 
     /**
      * Saves the data into the JSON file
