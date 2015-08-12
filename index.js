@@ -57,9 +57,15 @@ var Storage = function(){
      */
     this.save = function( index, value, callback ){
         $this.open( function( data ){
-            data[ index ] = value;
+            if( typeof value == "function" && typeof index == "object" ){
+                data = index;
+                callback = value;
+            } else{
+                data[ index ] = value;
+            }
+
             $this.push( data, function( data ){
-                var saved = data[ index ] !== undefined;
+                var saved = data || false;
 
                 callback( saved );
             });
