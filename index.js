@@ -63,8 +63,8 @@ var Storage = function(){
     this.get = function( loadingPath, requiredPath, callback ){
         var dir = requiredPath.split( "/" );
 
-        if( dir[ dir.length -1 ] == "lib" ){
-            dir.splice( dir.length -1, 1 );
+        if( dir[ dir.length -2 ] == "lib" ){
+            dir.splice( dir.length -2, 1 );
             requiredPath = dir.join( "/" );
         }
 
