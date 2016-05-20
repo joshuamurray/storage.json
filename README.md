@@ -7,7 +7,7 @@ A simple node module, for easily managing application JSON files.
 
 # Usage
 
-    #config()
+    config()
         var store = require( 'storage.json' );
 
         var config = store.config({ data: "your personal config options" }); //Creates "config.json"
@@ -23,7 +23,7 @@ A simple node module, for easily managing application JSON files.
                 ~ OR ~
                 var config = store.config( 'customName', { data: "your data", npmIgnore: true }); // Adds customName.json to .npmignore
 
-    #read()
+    read()
         var store = require( 'storage.json' );
 
         var contents = store.read( 'filename' );
