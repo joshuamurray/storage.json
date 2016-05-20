@@ -17,7 +17,7 @@ config( filename, options ) OR config( options )
     var config = store.config( 'customName', { data: "your personal config options" }); //Creates "customName.json"
     console.log( config.data );// Outputs "your personal config options"
 
-read()
+read( filename )
 
     var store = require( 'storage.json' );
     console.log( store.read( 'filename' ));// Outputs the contents of filename.json
