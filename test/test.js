@@ -7,11 +7,30 @@ var should = require( 'chai' ).should();
 describe( 'storage.json', function(){
     describe( '#parse()', function(){
         it( 'should parse file paths which prefix the filename separated by a colon', function(){
-            storage.parse( 'app:filename' ).should.deep.equal({ name: 'filename', path: 'app' });
+            storage.parse( 'app:filename' ).should.deep.equal({ name: 'filename', path: 'app', prop: '' });
         });
 
-        it( 'should return no path, if none was present', function(){
-            storage.parse( 'filename' ).should.deep.equal({ name: 'filename' });
+        it( 'should return an empty path, if none was present', function(){
+            storage.parse( 'filename' ).should.deep.equal({ name: 'filename', path: '', prop: '' });
+        });
+
+        it( 'should parse "dot" notation within the filename as properties', function(){
+            storage.parse( 'filename.property' ).should.deep.equal({ name: 'filename', path: '', prop: 'property' });
+        });
+
+        it( 'should ignore file extensions when parsing "dot" notation strings', function(){
+            var extensions = [ '.npmignore', '.gitignore', '.json', '.js' ];
+
+            for( var index in extensions ){
+                var extension = extensions[ index ];
+
+                //with path
+                storage.parse( 'app:filename' + extension ).should.deep.equal({ name: 'filename' + extension, path: 'app', prop: '' });
+                //without path
+                storage.parse( 'filename' + extension ).should.deep.equal({ name: 'filename' + extension, path: '', prop: '' });
+                //extension only
+                storage.parse( extension ).should.deep.equal({ name: extension, path: '', prop: '' });
+            }
         });
     });
 
@@ -251,6 +270,52 @@ describe( 'storage.json', function(){
         });
     });
 
+    describe( '#search()', function(){
+        var deeply_nested = { a: { deeply: { nested: { property: 'value' }}}};
+
+        it( 'should return the value of deeply nested properties using "dot" notation', function(){
+            var results = storage.search( deeply_nested, 'a.deeply.nested.property' ) === undefined;
+
+            results.should.equal( false );
+
+            storage.search( deeply_nested, 'a.deeply.nested.property' ).should.equal( 'value' );
+        });
+
+        it( 'should return undefined if the property was not located/assigned', function(){
+            var results = storage.search( deeply_nested, 'a.deeply.nested.prop' ) === undefined;
+
+            results.should.equal( true );
+        });
+    });
+
+    describe( '#extract()', function(){
+        before( function(){
+            storage.build( 'test', { existing: { exists: 'exists' }});
+        });
+
+        after( function(){
+            storage.delete( 'test' );
+        });
+
+        it( 'should return the value of an existing property from the file', function(){
+            storage.extract( 'test', 'existing' ).should.deep.equal({ exists: 'exists' });
+        });
+
+        it( 'should return the value of "revert" if the property is not set AND a value is provided for "revert"', function(){
+            storage.extract( 'test', 'missing', { revert: 'revert' }).should.deep.equal({ revert: 'revert' });
+        });
+
+        it( 'should return "undefined" if the property is not set within the file AND nothing is passed for "revert"', function(){
+            var result = storage.extract( 'test', 'missing' ) === undefined;
+
+            result.should.equal( true );
+        });
+
+        it( 'should parse "dot" notation within the "property" to extract deep properties', function(){
+            storage.extract( 'test', 'existing.exists' ).should.equal( 'exists' );
+        });
+    });
+
     describe( '#generate()', function(){
         it( 'should generate a file within the current module base directory', function(){
             storage.generate();
@@ -461,6 +526,12 @@ describe( 'storage.json', function(){
 
             fs.readFileSync( storage.resolve( 'root:.npmignore', false ), { encoding: "utf8" }).indexOf( 'config.json' ).should.equal( -1 );
             fs.readFileSync( storage.resolve( 'root:.npmignore', false ), { encoding: "utf8" }).indexOf( storage.configFileName ).should.equal( -1 );
+        });
+
+        after( function(){
+            var npmignore = "node_modules/\ntest/\ncomponent.json\n.travis.yml\nMakefile";
+
+            fs.writeFileSync( storage.resolve( 'root:.npmignore', false ), npmignore, { encoding: "utf8" });
         });
     });
 });

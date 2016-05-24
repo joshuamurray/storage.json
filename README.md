@@ -1,5 +1,5 @@
 # storage.json
-A simple node module, for easily managing application JSON files.
+A simple node module, for easily managing application JSON configuration, and reading JSON files.
 
 # Installation:
 

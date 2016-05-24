@@ -19,7 +19,7 @@ var Storage = function(){
      * configuration data. This will be generated within the
      * base directory of any module that uses storage.json.
      */
-    this.configFileName = 'config.storage.json';
+    this.configFileName = 'options.json';
 
     /**
      * Basic methods to return specific directory paths for resolution.
@@ -85,11 +85,23 @@ var Storage = function(){
     this.parse = function( filename ){
         var pieces = filename.split( ':' );
 
-        if( pieces.length === 1 ) return { name: pieces[ 0 ]};
+        var prop = '';
+        var path = pieces.length > 1 ? pieces[ 0 ] : '';
+        var name = pieces.length > 1 ? pieces[ 1 ] : pieces[ 0 ];
 
-        if( pieces.length > 1 ) return { path: pieces[ 0 ], name: pieces[ 1 ]};
+        var props = name.split( '.' );
+        var extensions = [ 'npmignore', 'gitignore', 'json', 'js' ];
 
-        return false;
+        if( props.length > 1 ){
+            var name_pieces = props[ 0 ] === '' ? props.splice( 0, 2 ) : props.splice( 0, 1 );
+
+            for( var index in props ) if( extensions.indexOf( props[ index ]) !== -1 ) name_pieces.push( props.splice( index, 1 )[ 0 ]);
+
+            name = name_pieces.join( '.' );
+            prop = props.join( '.' );
+        }
+
+        return { path: path, name: name, prop: prop };
     }
 
     /**
@@ -104,9 +116,9 @@ var Storage = function(){
 
         if( json && file.name.substr( file.name.length - 5 ) != ".json" ) file.name += ".json";
 
-        file.path = file.path === undefined ? [ file.name ] : file.path;
+        file.path = file.path === '' ? [ file.name ] : file.path;
 
-        if( typeof file.path === 'string' ){
+        if( typeof file.path === 'string' && file.path.length ){
             if([ 'app', 'root', 'config', 'storage' ].indexOf( file.path ) !== -1 ) file.path = $this.directory[ file.path ]();
 
             file.path = file.path.split( '/' )
@@ -225,6 +237,44 @@ var Storage = function(){
     };
 
     /**
+     * Parses a "dot" notation index and returns the corresponding value from within the object.
+     * @param object
+     * @param dotProp
+     * @returns {*}
+     */
+    this.search = function( object, dotProp ){
+        var layers = dotProp.split( '.' );
+
+        if( layers.length > 1 ) for( var layer in layers ){
+            var prop = layers.splice( layer, 1 )[ 0 ];
+            var down = layers.join( '.' );
+
+            if( down.indexOf( '.' ) !== -1 ) return $this.search( object[ prop ], down );
+
+            else return object[ prop ][ down ];
+        }
+
+        return object[ dotProp ];
+    }
+
+    /**
+     * Extract a specific property from a json file.
+     * @param filename
+     * @param property
+     */
+    this.extract = function( filename, property, revert ){
+        var contents = $this.read( filename );
+
+        if( property.split( '.' ).length > 1 ) return $this.search( contents, property );
+
+        if( contents[ property ] !== undefined ) return contents[ property ];
+
+        if( revert !== undefined ) return revert;
+
+        return undefined;
+    }
+
+    /**
      * Generates the configuration file for a module importing storage.json.
      * @param options
      * @returns {boolean}
@@ -324,11 +374,15 @@ var Storage = function(){
         var appContents = fs.readFileSync( app, { encoding: "utf8" });
         var rootContents = fs.readFileSync( root, { encoding: "utf8" });
 
-        appContents = appContents.indexOf( "\n" + filename ) !== -1 ? appContents.replace( "\n" + filename, '' ) : appContents;
-        rootContents = rootContents.indexOf( "\n" + filename ) !== -1 ? rootContents.replace( "\n" + filename, '' ) : rootContents;
+        appContents = appContents.indexOf( filename ) !== -1 ? appContents.replace( filename, '' ) : appContents;
+        rootContents = rootContents.indexOf( filename ) !== -1 ? rootContents.replace( filename, '' ) : rootContents;
 
-        appContents = appContents.indexOf( "\n" + $this.configFileName ) !== -1 ? appContents.replace( "\n" + $this.configFileName, '' ) : appContents;
-        rootContents = rootContents.indexOf( "\n" + $this.configFileName ) !== -1 ? rootContents.replace( "\n" + $this.configFileName, '' ) : rootContents;
+        appContents = appContents.indexOf( $this.configFileName ) !== -1 ? appContents.replace( $this.configFileName, '' ) : appContents;
+        rootContents = rootContents.indexOf( $this.configFileName ) !== -1 ? rootContents.replace( $this.configFileName, '' ) : rootContents;
+
+        console.log( appContents.trim() );
+        console.log( rootContents.trim() );
+
 
         fs.writeFileSync( app, appContents.trim(), { encoding: "utf8" });
         fs.writeFileSync( root, rootContents.trim(), { encoding: "utf8" });
