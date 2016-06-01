@@ -9,17 +9,111 @@ var path = require( "path" );
  * Handles storage of trivial data for requiring modules within a JSON file.
  * File will be created if it doesn't exist.
  * Primary functions: config( filename ), read( {PATH=optional}:{FILENAME} )
+ * @todo "live()"{ASYNCHRONOUS} or "once()"{SYNCHRONOUS}
  * @constructor
  */
 var Storage = function(){
     var $this = this;
+
+    this.defaultsFileName = 'defaults.json';
 
     /**
      * The name of the file which holds an extending module's
      * configuration data. This will be generated within the
      * base directory of any module that uses storage.json.
      */
-    this.configFileName = 'options.json';
+    this.rootFileName = 'options.json';
+
+    /**
+     * The name of the file which holds an extending module's
+     * configuration data. This will be generated within the
+     * base directory of any module that uses storage.json.
+     */
+    this.moduleFileName = 'app.json';
+
+    /**
+     * A list of files used by third party applications to list "ignored" files.
+     * Used to ignore any configuration files, when using version control.
+     * @type {string[]}
+     */
+    this.fileExtensions = [ '.gitignore', '.npmignore', '.json' ];
+
+    /**
+     * Asserts that a "dot" notation file/property exists and contains a value.
+     * @param dot_index
+     * @returns {boolean}
+     */
+    this.has = function( dot_index ){
+        if( $this.read( dot_index ) !== undefined ) return true;
+
+        return false;
+    };
+
+    /**
+     * Returns the value of a "dot" notation file/property.
+     * @param dot_index
+     * @param revert
+     * @returns {*}
+     */
+    this.get = function( dot_index, revert ){
+        if( ! $this.has( dot_index ) && revert !== undefined ) return revert;
+
+        return $this.read( dot_index );
+    };
+
+    /**
+     * Sets the value of a "dot" notation file/property to value.
+     * @param dot_index
+     * @param value
+     * @returns {boolean}
+     */
+    this.set = function( dot_index, value ){
+        var before = $this.has( dot_index ) ? $this.get( dot_index ) : false;
+
+        $this.inject( value, dot_index );
+
+        var after = $this.has( dot_index ) ? $this.get( dot_index ) : false;
+
+        if( typeof after === 'object' || typeof after === typeof new Array()) after = JSON.stringify( after );
+        if( typeof before === 'object' || typeof before === typeof new Array()) before = JSON.stringify( before );
+
+        return before !== after;
+    };
+
+    /**
+     * Return the contents of the root config file, after
+     * ensuring that the app config has been injected.
+     * @todo refactor
+     * @param {string|object} [filename] - OR options
+     * @param {object} [options]
+     * @returns {object}
+     */
+    this.config = function( filename, options, defaults ){
+        defaults = defaults || {};
+        defaults = typeof filename === 'object' && typeof options === 'object' ? options : defaults;
+
+        options = options || {};
+        options = typeof filename === 'object' ? filename : options;
+
+        if( typeof options.defaults === 'object' ){
+            defaults = $this.absorb( defaults, options.defaults );
+            delete options.defaults;
+        }
+
+        filename = typeof filename === 'string' ? filename : false;
+        if( filename !== false ) options.rootFileName = filename;
+
+        options = $this.setup( $this.absorb( defaults, options ));
+
+        if( $this.moduleFileName !== false && $this.directory.app() !== $this.directory.root()) $this.inject( options, 'app:' + $this.moduleFileName );
+
+        if( $this.rootFileName !== false ){
+            if( $this.exists( 'app:' + $this.moduleFileName )) $this.inject( 'app:' + $this.moduleFileName, 'root:' + $this.rootFileName );
+            else $this.inject( options, 'root:' + $this.rootFileName );
+        }
+
+        return $this;
+    };
 
     /**
      * Basic methods to return specific directory paths for resolution.
@@ -28,19 +122,13 @@ var Storage = function(){
     this.directory = {
         /**
          * The values used when locating paths.
+         * @todo extract to config file
          */
         list: {
+            app: '',
             root: '.',
             config: 'node_modules/config/',
             storage: 'node_modules/storage.json/'
-        },
-
-        set: function( type, value ){
-            if( Object.keys( this.list ).indexOf( type ) === -1 ) return false;
-
-            this.list[ type ] = value;
-
-            return true;
         },
 
         /**
@@ -48,7 +136,9 @@ var Storage = function(){
          * @returns {*}
          */
         app: function(){
-            return __dirname;
+            var appFolder = this.list.app.length ? '/' + this.list.app : '';
+
+            return path.resolve( __dirname ) + appFolder;
         },
 
         /**
@@ -73,7 +163,46 @@ var Storage = function(){
          */
         storage: function(){
             return [ this.root(), this.list.storage ].join( '/' );
+        },
+
+        prefix: function( path ){
+            for( var item in this.list ){
+                if( item === 'app' && path === this.app()) return path === this.root() ? 'root:' : 'app:';
+
+                if( path === this[ item ]()) return item + ':';
+            }
+
+            if( path.length && path[ path.length - 1 ] !== '/' ) path = path + '/';
+
+            return path;
         }
+    };
+
+    /**
+     * Asserts that the filename/path does not include a file extension.
+     * @param filename
+     * @returns {boolean}
+     */
+    this.extended = function( filename ){
+        filename = filename.split( '/' )[ filename.split( '/' ).length -1 ];
+
+
+        for( var index in $this.fileExtensions ) if( filename.indexOf( $this.fileExtensions[ index ]) !== -1 ) return true;
+
+        return false;
+    };
+
+    /**
+     * Adds the .json file extension if no file extension is present.
+     * @param filename
+     * @returns {*}
+     */
+    this.extend = function( filename ){
+        filename = filename.replace( '~', '.' );
+
+        if( $this.extended( filename )) return filename;
+
+        return filename + '.json';
     }
 
     /**
@@ -83,49 +212,55 @@ var Storage = function(){
      * @returns {*}
      */
     this.parse = function( filename ){
-        var pieces = filename.split( ':' );
+        var parts = { path: '', prop: '', name: '' };
 
-        var prop = '';
-        var path = pieces.length > 1 ? pieces[ 0 ] : '';
-        var name = pieces.length > 1 ? pieces[ 1 ] : pieces[ 0 ];
+        if( typeof filename === 'string' ){
+            for( var index in $this.fileExtensions )
+                if( filename.indexOf( $this.fileExtensions[ index ]) !== -1 )
+                    filename = filename.replace( $this.fileExtensions[ index ], $this.fileExtensions[ index ].replace( '.', '~' ));
 
-        var props = name.split( '.' );
-        var extensions = [ 'npmignore', 'gitignore', 'json', 'js' ];
+            if( filename.indexOf( '/' ) !== -1 ){
+                parts.path = filename.split( '/' );
+                parts.name = parts.path.splice( parts.path.length - 1, 1 )[ 0 ];
+                parts.path = parts.path.join( '/' ).replace( '~', '.' );
+            } else if( filename.indexOf( ':' ) !== -1 ){
+                parts.path = filename.split( ':' );
+                parts.name = parts.path.splice( 1, 1 )[ 0 ];
+                parts.path = $this.directory[ parts.path[ 0 ]]();
+            } else{
+                parts.path = ''
+                parts.name = filename;
+            }
 
-        if( props.length > 1 ){
-            var name_pieces = props[ 0 ] === '' ? props.splice( 0, 2 ) : props.splice( 0, 1 );
+            parts.prop = parts.name.split( '.' );
+            parts.name = $this.extend( parts.prop.splice( 0, 1 )[ 0 ]);
 
-            for( var index in props ) if( extensions.indexOf( props[ index ]) !== -1 ) name_pieces.push( props.splice( index, 1 )[ 0 ]);
-
-            name = name_pieces.join( '.' );
-            prop = props.join( '.' );
+            parts.prop = parts.prop.length ? parts.prop.join( '.' ) : '';
+            parts.file = $this.directory.prefix( parts.path ) + parts.name;
+        } else {
+            parts.value = filename;
         }
 
-        return { path: path, name: name, prop: prop };
+        return parts;
     }
 
     /**
      * Returns the resolved path to the file, after
      * adding the ".json" extension, if not present.
+     * @todo refactor
      * @param filename
      * @returns {string}
      */
-    this.resolve = function( filename, json ){
-        json = json !== false;
+    this.resolve = function( filename ){
         var file = $this.parse( filename );
 
-        if( json && file.name.substr( file.name.length - 5 ) != ".json" ) file.name += ".json";
+        file.path = file.path.length && file.path.indexOf( '/' ) !== -1 ? file.path.split( '/' ) : [ file.name ];
 
-        file.path = file.path === '' ? [ file.name ] : file.path;
+        if( file.path.indexOf( file.name ) === -1 ) file.path.push( file.name );
 
-        if( typeof file.path === 'string' && file.path.length ){
-            if([ 'app', 'root', 'config', 'storage' ].indexOf( file.path ) !== -1 ) file.path = $this.directory[ file.path ]();
+        file.path = file.path.join( '/' );
 
-            file.path = file.path.split( '/' )
-            file.path.push( file.name );
-        }
-
-        return path.resolve( file.path.join( '/' ));
+        return path.resolve( file.path );
     }
 
     /**
@@ -133,9 +268,8 @@ var Storage = function(){
      * @param filename
      * @returns {boolean}
      */
-    this.exists = function( filename, json ){
-        json = json !== false;
-        var path = $this.resolve( filename, json );
+    this.exists = function( filename ){
+        var path = $this.resolve( filename );
 
         try {
             if ( fs.lstatSync( path ).isFile()) return true;
@@ -150,14 +284,20 @@ var Storage = function(){
      * Formats the object into a "human-readable" JSON string.
      * Providing spaces = 0 will dehumanize the string.
      * @param object
-     * @param spaces
+     * @param spacing
      */
-    this.format = function( object, spaces ){
-        spaces = typeof spaces === 'number' ? spaces : 2;
+    this.format = function( filename, contents, spacing ){
+        if( $this.parse( filename ).name.indexOf( '.json' ) === -1 ){
+            return contents || '';
+        }
 
-        if( typeof object === 'string' ) object = JSON.parse( object );
+        contents = contents || {};
 
-        return JSON.stringify( object, null, spaces );
+        spacing = typeof spacing === 'number' ? spacing : 2;
+
+        if( typeof contents === 'string' ) contents = JSON.parse( contents );
+
+        return JSON.stringify( contents, null, spacing );
     };
 
     /**
@@ -182,17 +322,29 @@ var Storage = function(){
      * @returns {boolean}
      */
     this.build = function( filename, contents, overwrite ){
-        var path = $this.resolve( filename );
-        contents = $this.format( contents === undefined ? {} : contents );
+        if( $this.exists( filename ) && overwrite !== true ) return false;
 
-        if( ! $this.exists( filename ) || overwrite === true ){
-            fs.openSync( path, 'w' );
-            fs.writeFileSync( path, contents, { encoding: "utf8" });
+        $this.delete( filename );
+
+        if( ! $this.exists( filename )){
+            fs.openSync( $this.resolve( filename ), 'w' );
+            fs.writeFileSync( $this.resolve( filename ), $this.format( filename, contents ), { encoding: "utf8" });
 
             if( $this.exists( filename )) return true;
         }
 
         return false;
+    };
+
+    /**
+     * Wrapper: Insist that the filename exists before continuing.
+     * @param {string} filename
+     * @returns {string}
+     */
+    this.insist = function( filename ){
+        if( ! $this.exists( filename )) $this.build( filename );
+
+        return $this.parse( filename ).file;
     };
 
     /**
@@ -203,37 +355,161 @@ var Storage = function(){
     this.update = function( filename, contents ){
         if( ! this.exists( filename )) return false;
 
-        fs.writeFileSync( $this.resolve( filename ), $this.format( contents ), { encoding: "utf8" });
-
-        return true;
+        return $this.build( filename, contents, true );
     };
 
     /**
      * Returns the contents of a file as a parsed Object or Array
      * @param filename
      */
-    this.read = function( filename ){
-        return $this.exists( filename ) ? JSON.parse( fs.readFileSync( storage.resolve( filename ), { encoding: "utf8" })) : false;
+    this.read = function( filename, revert ){
+        if( $this.exists( filename )){
+            if( $this.parse( filename ).name.indexOf( '.json' ) === -1 ) return fs.readFileSync( $this.resolve( filename ), { encoding: "utf8" });
+
+            var object = {};
+            var parsed = $this.parse( filename );
+            var contents = fs.readFileSync( $this.resolve( filename ), { encoding: "utf8" });
+
+            if( parsed.name.indexOf( '.json' ) !== -1 ) object = JSON.parse( contents );
+
+            if( parsed.prop.length > 0 ) return $this.extract( object, parsed.prop, revert );
+
+            return object;
+        }
+
+        return revert;
     };
 
     /**
-     * Inject the properties from one file into another,
-     * unless those properties already exist. Force an
-     * overwrite, by providing true to the forced arg.
+     * Inserts a new property into an object, using a "dot" notation string.
+     * @param object
+     * @param dotProp
+     * @param value
+     * @returns {*}
+     */
+    this.insert = function( object, dotProp, value ){
+        if( $this.search( object, dotProp ) === undefined ){
+            object = $this.scaffold( dotProp, value, object );
+        } else {
+            var insert = {};
+
+            insert[ dotProp ] = value;
+
+            object = $this.absorb( object, $this.inflate( insert ));
+        }
+
+        return object;
+    };
+
+    /**
+     * Inject the properties from one file into another, unless those properties already exist.
      * @param from
      * @param into
-     * @param force
      */
-    this.inject = function( fileFrom, fileInto, force ){
-        force = force === true;
+    this.inject = function( inject, target ){
+        if( typeof inject === 'object' && typeof target === 'object' ) return $this.absorb( target, inject );
 
-        var from = typeof fileFrom === 'object' ? fileFrom : $this.read( fileFrom );
-        var into = $this.read( fileInto );
+        var injection = typeof target === 'string' && $this.parse( target ).prop.length ? $this.parse( target ).prop : undefined;
 
-        for( var property in from )
-            if( ! into.hasOwnProperty( property ) || force ) into[ property ] = from[ property ];
+        if( typeof inject === 'string' && $this.read( inject ) !== undefined ) inject = $this.read( inject );
 
-        return $this.update( fileInto, into );
+        if( typeof inject !== 'object' ){
+            inject = $this.scaffold( injection, inject );
+            injection = false;
+        }
+
+        var contents = typeof target === 'string' && $this.exists( target ) || $this.build( target ) ? $this.read( $this.parse( target ).file ) : {};
+
+        contents = ! injection ? $this.absorb( contents, inject ) : $this.insert( contents, injection, inject );
+
+        return $this.update( target, contents );
+    };
+
+    /**
+     * Overwrite/create properties within an object, using another object.
+     * @param {object} original
+     * @param {object} absorb
+     * @returns {*}
+     */
+    this.absorb = function( original, absorb ){
+        if( typeof original === 'object' && typeof absorb === 'object' ){
+            for( var property in absorb ){
+                if( original.hasOwnProperty( property ) && typeof original[ property ] === 'object' && typeof absorb[ property ] === 'object' ){
+                    original[ property ] = $this.absorb( original[ property ], absorb[ property ]);
+                } else{
+                    original[ property ] = absorb[ property ];
+                }
+            }
+        }
+
+        return original;
+    }
+
+    /**
+     * Remove all nested objects, and replace them with "dot" notation indexes containing their assigned values
+     * @param object
+     * @param layer
+     * @param flat
+     * @returns {*|{}}
+     */
+    this.flatten = function( object, layer, flat ){
+        flat = flat || {};
+        layer = layer || '';
+
+        var keys = typeof object === 'object' ? Object.keys( object ) : [];
+
+        for( var index in keys ){
+            var property = keys[ index ];
+            var currentLayer = layer === '' ? property : layer + '.' + property;
+
+            if( typeof object[ property ] === 'object' && Object.keys( object[ property ]).length > 0 ) flat = $this.flatten( object[ property ], currentLayer, flat );
+
+            else flat[ currentLayer ] = object[ property ];
+        }
+
+        return flat;
+    }
+
+    /**
+     * Remove all "dot" notation indexes, and replace them with nested objects containing their assigned values
+     * @param flattened
+     * @param layer
+     * @param full
+     * @returns {*|{}}
+     */
+    this.inflate = function( flattened, layer, full ){
+        full = full || {};
+
+        var keys = typeof flattened === 'object' ? Object.keys( flattened ) : [];
+
+        for( var index in keys ){
+            var property = keys[ index ];
+
+            if( property.indexOf( '.' ) !== -1 ) full = $this.absorb( full, $this.scaffold( property, flattened[ property ]));
+
+            else full[ property ] = flattened[ property ];
+        }
+
+        return full;
+    }
+
+    /**
+     * Creates or populates a deep index within an object.
+     * @param dotProp
+     * @param value
+     * @param object
+     */
+    this.scaffold = function( dotProp, value, object ){
+        object = object || {};
+
+        if( typeof object !== 'object' && typeof value === 'object' ) return value;
+
+        var layers = dotProp.split( '.' );
+        dotProp = layers.splice( 0, 1 )[ 0 ];
+
+        object[ dotProp ] = layers.length === 0 ? value : $this.scaffold( layers.join( '.' ), value, object[ dotProp ]);
+
+        return object;
     };
 
     /**
@@ -244,17 +520,11 @@ var Storage = function(){
      */
     this.search = function( object, dotProp ){
         var layers = dotProp.split( '.' );
+        var prop = layers.splice( 0, 1 )[ 0 ];
 
-        if( layers.length > 1 ) for( var layer in layers ){
-            var prop = layers.splice( layer, 1 )[ 0 ];
-            var down = layers.join( '.' );
+        if( layers.length > 0 && typeof object[ prop ] === 'object' ) return $this.search( object[ prop ], layers.join( '.' ));
 
-            if( down.indexOf( '.' ) !== -1 ) return $this.search( object[ prop ], down );
-
-            else return object[ prop ][ down ];
-        }
-
-        return object[ dotProp ];
+        return object[ prop ] || undefined;
     }
 
     /**
@@ -262,16 +532,12 @@ var Storage = function(){
      * @param filename
      * @param property
      */
-    this.extract = function( filename, property, revert ){
-        var contents = $this.read( filename );
+    this.extract = function( object, property, revert ){
+        var extracted = $this.search( object, property );
 
-        if( property.split( '.' ).length > 1 ) return $this.search( contents, property );
+        if( extracted !== undefined ) return extracted;
 
-        if( contents[ property ] !== undefined ) return contents[ property ];
-
-        if( revert !== undefined ) return revert;
-
-        return undefined;
+        return revert;
     }
 
     /**
@@ -280,80 +546,90 @@ var Storage = function(){
      * @returns {boolean}
      */
     this.generate = function( options ){
-        return $this.build( 'app:' + $this.configFileName, options );
+        return $this.build( 'app:' + $this.rootFileName, options );
     };
 
     /**
-     * Return the contents of the root config file, after
-     * ensuring that the app config has been injected.
-     * @param {string|object} [filename] - OR options
-     * @param {object} [options]
-     * @returns {object}
+     * Returns an object containing each of the possible resolved paths for the file.
+     * @param filename
+     * @param list
+     * @returns {{}}
      */
-    this.config = function( filename, options ){
-        if( ! options && typeof filename === 'object' ) options = filename;
-        if( ! filename || typeof filename !== 'string' ) filename = 'config';
+    this.paths = function( filename, list ){
+        var paths = {};
 
-        options = typeof options === 'object' ? options : {};
+        list = list || Object.keys( $this.directory.list );
 
-        if( options.npmIgnore !== undefined ) options = $this.ignore( filename, options );
+        if( filename.indexOf( ':' ) !== -1 ) filename = filename.substr( filename.indexOf( ':' ) + 1 );
 
-        var rootConfig = 'root:' + filename;
-        var appConfig = 'app:' + $this.configFileName;
+        for( var index in list ){
+            if( $this.fileExtensions.indexOf( filename ) !== -1 && [ 'app', 'root' ].indexOf( list[ index ]) === -1 ) delete list[ index ];
 
-        if( ! $this.exists( appConfig )) $this.generate( options );
-        if( ! $this.exists( rootConfig )) $this.build( rootConfig, $this.read( appConfig ));
+            if( list[ index ] === 'storage' && __dirname.indexOf( 'storage.json' ) === -1 ) delete list[ index ];
+        }
 
-        $this.inject( appConfig, rootConfig );
+        for( var index in list ) paths[ list[ index ]] = $this.resolve( list[ index ] + ':' + filename );
 
-        return $this.read( rootConfig );
+        for( var index in paths ) if( index !== 'root' && paths[ index ] === paths.root ) delete paths[ index ];
+
+        return paths;
     };
 
     /**
-     * Appends the configuration file names to the root/module ".npmignore" file(s).
+     * Uses preset options to setup options for storage.json.
+     * These presets are removed from the returned options.
+     * @param options
+     * @returns {*}
+     */
+    this.setup = function( options ){
+        var files = { storage: 'defaultsFileName', app: 'moduleFileName', root: 'rootFileName' };
+
+        for( var index in files ) if( typeof options[ files[ index ]] === 'string' || options[ files[ index ]] === false ) $this[ files[ index ]] = options[ files[ index ]];
+
+        if( options.fileExtensions ){
+            if( typeof options.fileExtensions === 'string' ) options.fileExtensions = [ options.fileExtensions ];
+            if( typeof options.fileExtensions === typeof new Array()) $this.fileExtensions = options.fileExtensions;
+        }
+
+        if( options.npmIgnore === true ) $this.ignore( '.npmignore' );
+        if( options.npmIgnore === false ) $this.include( '.npmignore' );
+
+        if( options.gitIgnore === true ) $this.ignore( '.npmignore' );
+        if( options.gitIgnore === false ) $this.include( '.npmignore' );
+
+        var overrides = [ 'npmIgnore', 'gitIgnore', 'defaultsFileName', 'rootFileName', 'moduleFileName', 'fileExtensions' ];
+
+        for( var index in overrides ) delete options[ overrides[ index ]];
+
+        return options;
+    }
+
+    /**
+     * Appends the configuration file names to the root/module's
+     * ".npmignore" AND / OR ".gitignore" file(s).
      * @param {string} filename
      * @param {object} options
      * @returns {*}
      */
-    this.ignore = function( filename, options ){
-        if( options.npmIgnore !== undefined ){
-            if( options.npmIgnore === true ){
-                if( filename.substr( filename.length - 5 ) != ".json" ) filename += ".json";
+    this.ignore = function( filename ){
+        var paths = $this.paths( filename );
 
-                var app = $this.resolve( 'app:.npmignore', false );
-                var root = $this.resolve( 'root:.npmignore', false );
+        var files = { defaults: "\n" + $this.defaultsFileName };
 
-                if ( ! $this.exists( app, false )) fs.openSync( app, 'w' );
-                if ( ! $this.exists( root, false )) fs.openSync( root, 'w' );
+        if( !! $this.rootFileName ) files.root = "\n" + $this.rootFileName;
+        if( !! $this.moduleFileName ) files.app = "\n" + $this.moduleFileName;
 
-                var appContents = fs.readFileSync( app, { encoding: "utf8" });
-                var rootContents = fs.readFileSync( root, { encoding: "utf8" });
+        for( var path in paths ){
+            if( ! $this.exists( paths[ path ])) fs.openSync( paths[ path ], 'w' );
 
-                appContents = appContents.length === 0 ? '' : appContents + "\n";
-                rootContents = rootContents.length === 0 ? '': rootContents + "\n";
+            var contents = fs.readFileSync( paths[ path ], { encoding: "utf8" });
 
-                appContents = appContents.indexOf( $this.configFileName ) === -1
-                    ? appContents + $this.configFileName
-                    : appContents;
+            for( var file in files ) if( contents.indexOf( files[ file ].trim()) === -1 ) contents = contents + files[ file ];
 
-                rootContents = rootContents.indexOf( filename ) === -1
-                    ? rootContents + filename
-                    : rootContents;
-
-                if( app === root ) rootContents = appContents.indexOf( filename ) === -1
-                    ? appContents + "\n" + filename
-                    : appContents;
-
-                fs.writeFileSync( app, appContents.trim(), { encoding: "utf8" });
-                fs.writeFileSync( root, rootContents.trim(), { encoding: "utf8" });
-            } else if( options.npmIgnore === false ){
-                $this.include( filename, options );
-            }
+            fs.writeFileSync( paths[ path ], contents.trim(), { encoding: "utf8" });
         }
 
-        delete options.npmIgnore;
-
-        return options;
+        return false;
     };
 
     /**
@@ -361,31 +637,25 @@ var Storage = function(){
      * @param filename
      * @param options
      */
-    this.include = function( filename, options ){
-        filename = typeof filename === 'string' ? filename : 'config';
-        if( filename.substr( filename.length - 5 ) != ".json" ) filename += ".json";
+    this.include = function( filename ){
+        var paths = $this.paths( filename );
 
-        var app = $this.resolve( 'app:.npmignore', false );
-        var root = $this.resolve( 'root:.npmignore', false );
+        var files = { defaults: "\n" + $this.defaultsFileName };
 
-        if ( ! $this.exists( 'app:.npmignore', false )) fs.openSync( app, 'w' );
-        if ( ! $this.exists( 'root:.npmignore', false )) fs.openSync( root, 'w' );
+        if( !! $this.rootFileName ) files.root = "\n" + $this.rootFileName;
+        if( !! $this.moduleFileName ) files.app = "\n" + $this.moduleFileName;
 
-        var appContents = fs.readFileSync( app, { encoding: "utf8" });
-        var rootContents = fs.readFileSync( root, { encoding: "utf8" });
+        for( var path in paths ){
+            if( $this.exists( paths[ path ])) {
+                var contents = fs.readFileSync( paths[ path ], { encoding: "utf8" });
 
-        appContents = appContents.indexOf( filename ) !== -1 ? appContents.replace( filename, '' ) : appContents;
-        rootContents = rootContents.indexOf( filename ) !== -1 ? rootContents.replace( filename, '' ) : rootContents;
+                for( var file in files ) if( contents.indexOf( files[ file ].trim()) !== -1 ) contents = contents.replace( files[ file ].trim(), '' );
 
-        appContents = appContents.indexOf( $this.configFileName ) !== -1 ? appContents.replace( $this.configFileName, '' ) : appContents;
-        rootContents = rootContents.indexOf( $this.configFileName ) !== -1 ? rootContents.replace( $this.configFileName, '' ) : rootContents;
+                fs.writeFileSync( paths[ path ], contents.trim(), { encoding: "utf8" });
+            }
+        }
 
-        console.log( appContents.trim() );
-        console.log( rootContents.trim() );
-
-
-        fs.writeFileSync( app, appContents.trim(), { encoding: "utf8" });
-        fs.writeFileSync( root, rootContents.trim(), { encoding: "utf8" });
+        return false;
     };
 };
 
