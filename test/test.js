@@ -133,8 +133,8 @@ describe( 'storage.json', function(){
             storage.resolve( 'config:filename.json' ).should.equal( path.resolve( './node_modules/config/filename.json' ));
         });
 
-        it( 'should resolve the proper path to the storage.js module', function(){
-            storage.resolve( 'storage:filename.json' ).should.equal( path.resolve( './node_modules/storage.json/filename.json' ));
+        it( 'should resolve the proper path to the storage.json module', function(){
+            storage.resolve( 'storage:filename.json' ).should.equal( path.resolve( './filename.json' ));
         });
 
         it( 'should resolve the proper path when provided a complete path', function(){
