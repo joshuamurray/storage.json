@@ -6,13 +6,20 @@ var fs = require( "fs" );
 var path = require( "path" );
 
 /**
+ * Exports a wrapper function to simplify the instantiation the Storage Class.
+ */
+module.exports = function( options ){
+    return new Storage( options );
+}
+
+/**
  * Handles storage of trivial data for requiring modules within a JSON file.
  * File will be created if it doesn't exist.
  * Primary functions: config( filename ), read( {PATH=optional}:{FILENAME} )
  * @todo "live()"{ASYNCHRONOUS} or "once()"{SYNCHRONOUS}
  * @constructor
  */
-var Storage = function(){
+var Storage = function( options ){
     var $this = this;
 
     this.defaultsFileName = 'defaults.json';
@@ -138,7 +145,7 @@ var Storage = function(){
         app: function(){
             var appFolder = this.list.app.length ? '/' + this.list.app : '';
 
-            return path.resolve( __dirname ) + appFolder;
+            return path.resolve( process.cwd() ) + appFolder;
         },
 
         /**
@@ -162,7 +169,7 @@ var Storage = function(){
          * @returns {*}
          */
         storage: function(){
-            return [ this.root(), this.list.storage ].join( '/' );
+            return return path.resolve( __dirname );
         },
 
         prefix: function( path ){
@@ -657,11 +664,6 @@ var Storage = function(){
 
         return false;
     };
+
+    if( options !== undefined ) return $this.config( options );
 };
-
-/**
- * Exports an instantiation of the Storage module.
- */
-var storage = new Storage();
-
-module.exports = storage;
