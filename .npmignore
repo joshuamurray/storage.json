@@ -1,5 +1,4 @@
 node_modules/
 test/
-component.json
-.travis.yml
-Makefile
+.idea/
+/.gitignore
