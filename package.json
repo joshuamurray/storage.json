@@ -1,7 +1,7 @@
 {
   "name": "storage.json",
   "version": "1.2.5",
-  "description": "A simple node module, for easily managing application JSON files.",
+  "description": "NPM package providing simplified create, read, update, and delete methods for JSON files. Also provides methods which simplify using JSON files to store configuration data.",
   "main": "index.js",
   "scripts": {
     "test": "node_modules/.bin/mocha"

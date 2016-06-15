@@ -2,7 +2,7 @@ var fs = require( "fs" );
 var path = require( "path" );
 
 var storage = require( '../index' );
-var should = require( 'chai' ).should();
+require( 'chai' ).should();
 
 describe( 'storage.json', function(){
     describe( '#extended()', function(){
@@ -11,8 +11,10 @@ describe( 'storage.json', function(){
         });
 
         it( 'should return true when any extension from storage.fileExtensions is present', function(){
-            for( var index in storage.fileExtensions )
+            for( var key in Object.keys( storage.fileExtensions )){
+                var index = Object.keys( storage.fileExtensions )[ key ];
                 storage.extended( 'file' + storage.fileExtensions[ index ]).should.equal( true );
+            }
         });
 
         it( 'should return true, when the filename already contains an extension', function(){
@@ -97,8 +99,8 @@ describe( 'storage.json', function(){
         });
 
         it( 'should ignore file extensions when parsing "dot" notation strings', function(){
-            for( var index in storage.fileExtensions ){
-                var extension = storage.fileExtensions[ index ];
+            for( var key in Object.keys( storage.fileExtensions )){
+                var extension = storage.fileExtensions[ Object.keys( storage.fileExtensions )[ key ]];
 
                 //with folders
                 storage.parse( 'files/filename' + extension ).should.deep.equal({ name: 'filename' + extension, path: 'files', prop: '', file: 'files/filename' + extension });
@@ -184,7 +186,7 @@ describe( 'storage.json', function(){
         it( 'should not apply JSON stringify, when the filename contains an extension, other than ".json"', function(){
             var test_files = [ 'test.npmignore', '.npmignore', 'test.gitignore', '.gitignore' ];
 
-            for( var index in test_files ) storage.format( test_files[ index ], "file contents" ).should.equal( "file contents" );
+            for( var key in Object.keys( test_files )) storage.format( test_files[ Object.keys( test_files )[ key ]], "file contents" ).should.equal( "file contents" );
         });
 
         it( 'should apply standard JSON spacing (2), when nothing is passed as argument 3', function(){
@@ -192,8 +194,8 @@ describe( 'storage.json', function(){
         });
 
         it( 'should apply alertnate JSON spacing, when an integer is passed as argument 3', function(){
-            storage.format( 'test', { format: 'format' }, 1 ).should.equal( JSON.stringify({ format: 'format' }, null, 1 ))
-            storage.format( 'test', { format: 'format' }, 3 ).should.equal( JSON.stringify({ format: 'format' }, null, 3 ))
+            storage.format( 'test', { format: 'format' }, 1 ).should.equal( JSON.stringify({ format: 'format' }, null, 1 ));
+            storage.format( 'test', { format: 'format' }, 3 ).should.equal( JSON.stringify({ format: 'format' }, null, 3 ));
         });
     });
 
@@ -419,7 +421,7 @@ describe( 'storage.json', function(){
         afterEach( function(){
             storage.delete( 'inject' );
             storage.delete( 'injectFrom' );
-        })
+        });
 
         it( 'should create a new file, if the target file does not exist', function(){
             storage.delete( 'inject' );
@@ -534,7 +536,7 @@ describe( 'storage.json', function(){
 
         beforeEach( function(){
             original = { an: { object: { which: { has: { very: { deeply: { nested: { properties: true }}}}}}}};
-        })
+        });
 
         it( 'should return an object (argument 1) after it has absorbed the properties of another object (argument 2)', function(){
             var absorb = { an: { object: 7 }};
@@ -612,15 +614,15 @@ describe( 'storage.json', function(){
         var expected = function( filename, include ){
             var paths = {};
 
-            for( var index in include ) paths[ include[ index ]] = storage.resolve( include[ index ] + ':' + filename );
+            for( var key in Object.keys( include )) paths[ include[ Object.keys( include )[ key ]]] = storage.resolve( include[ Object.keys( include )[ key ]] + ':' + filename );
 
-            for( var index in paths ) if( index !== 'root' && paths[ index ] === paths.root ) delete paths[ index ];
+            for( var kee in Object.keys( paths )) if( Object.keys( paths )[ kee ] !== 'root' && paths[ Object.keys( paths )[ kee ]] === paths.root ) delete paths[ Object.keys( paths )[ kee ]];
 
             return paths;
         };
 
         it( 'should return all possible paths for the filename (argument 1)', function(){
-            var paths = storage.paths( 'test' ).should.deep.equal( expected( 'test', [ 'app', 'root', 'config', 'storage' ]));
+            storage.paths( 'test' ).should.deep.equal( expected( 'test', [ 'app', 'root', 'config', 'storage' ]));
         });
 
         it( 'should only return paths listed within the list (argument 2)', function(){
@@ -634,7 +636,7 @@ describe( 'storage.json', function(){
         it( 'should not contain paths which were duplicates of the "root" path', function(){
             var paths = storage.paths( 'test' );
 
-            for( var index in paths ) if( index !== 'root' ) paths[ index ].should.not.equal( paths.root );
+            for( var key in Object.keys( paths )) if( Object.keys( paths )[ key ] !== 'root' ) paths[ Object.keys( paths )[ key ]].should.not.equal( paths.root );
         });
     });
 
@@ -644,17 +646,17 @@ describe( 'storage.json', function(){
         beforeEach( function() {
             defaultContents = "node_modules/\ntest/\ncomponent.json\n.travis.yml\nMakefile";
 
-            appIgnorePath = storage.resolve( 'app:.npmignore', false );
-            rootIgnorePath = storage.resolve( 'root:.npmignore', false );
+            appIgnorePath = storage.resolve( 'app:.npmignore' );
+            rootIgnorePath = storage.resolve( 'root:.npmignore' );
 
             // populate the original module file, if it doesn't exist
-            if( ! storage.exists( 'app:.npmignore', false )){
+            if( ! storage.exists( 'app:.npmignore' )){
                 fs.openSync( appIgnorePath, 'w' );
                 fs.writeFileSync( appIgnorePath, defaultContents, { encoding: 'utf8' });
             }
 
             // populate the original root file, if it doesn't exist
-            if( appIgnorePath !== rootIgnorePath && ! storage.exists( 'root:.npmignore', false )){
+            if( appIgnorePath !== rootIgnorePath && ! storage.exists( 'root:.npmignore' )){
                 fs.openSync( rootIgnorePath, 'w' );
                 fs.writeFileSync( rootIgnorePath, defaultContents, { encoding: 'utf8' });
             }
@@ -682,7 +684,7 @@ describe( 'storage.json', function(){
 
             var paths = storage.paths( '.npmignore' );
 
-            for( var path in paths ) fs.readFileSync( paths[ path ], { encoding: "utf8" }).indexOf( storage.defaultsFileName ).should.not.equal( -1 );
+            for( var key in Object.keys( paths )) fs.readFileSync( paths[ Object.keys( paths )[ key ]], { encoding: "utf8" }).indexOf( storage.defaultsFileName ).should.not.equal( -1 );
         });
 
         it( 'should append the config filename into the .npmignore files', function(){
@@ -690,7 +692,7 @@ describe( 'storage.json', function(){
 
             var paths = storage.paths( '.npmignore' );
 
-            for( var path in paths ) fs.readFileSync( paths[ path ], { encoding: "utf8" }).indexOf( storage.rootFileName ).should.not.equal( -1 );
+            for( var key in Object.keys( paths )) fs.readFileSync( paths[ Object.keys( paths )[ key ]], { encoding: "utf8" }).indexOf( storage.rootFileName ).should.not.equal( -1 );
         });
 
         it( 'should append the app filename into the .npmignore files', function(){
@@ -698,7 +700,7 @@ describe( 'storage.json', function(){
 
             var paths = storage.paths( '.npmignore' );
 
-            for( var path in paths ) fs.readFileSync( paths[ path ], { encoding: "utf8" }).indexOf( storage.moduleFileName ).should.not.equal( -1 );
+            for( var key in Object.keys( paths )) fs.readFileSync( paths[ Object.keys( paths )[ key ]], { encoding: "utf8" }).indexOf( storage.moduleFileName ).should.not.equal( -1 );
         });
 
         afterEach( function(){
@@ -887,7 +889,7 @@ describe( 'storage.json', function(){
         after( function(){
             var npmignore = "node_modules/\ntest/\ncomponent.json\n.travis.yml\nMakefile";
 
-            fs.writeFileSync( storage.resolve( 'root:.npmignore', false ), npmignore, { encoding: "utf8" });
+            fs.writeFileSync( storage.resolve( 'root:.npmignore' ), npmignore, { encoding: "utf8" });
         });
     });
 
@@ -911,7 +913,7 @@ describe( 'storage.json', function(){
         it( 'should return false if the file does not contain the "dot" notation properties', function(){
             storage.has( 'test.missing' ).should.equal( false );
         });
-    })
+    });
 
     describe( '#get()', function(){
         var obj = { first: 'first test', second: 'second test' };

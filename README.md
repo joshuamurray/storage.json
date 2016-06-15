@@ -4,7 +4,7 @@
 ---
 # Installation:
 #### Install:    
-    npm install storage.json
+    npm install storage.json 
 
 #### Require:
     var storage = require('storage.json' );
